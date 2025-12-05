@@ -33,13 +33,23 @@ impl GameState for Quorridor {
         if player_0_progress_on_board == 8 || player_1_progress_on_board == 8 {
             vec![]
         } else {
-            vec![
-                Move::Up, 
-                Move::Down, 
-                Move::Left, 
-                Move::Right,
-                Move::PlaceWall
-                ]
+            let mut moves: Vec<Move> = vec![];
+            if self.player_pieces[self.active_player].y < 8 {
+                moves.push(Move::Up);
+            }
+            if self.player_pieces[self.active_player].y > 0 {
+                moves.push(Move::Down);
+            }
+            if self.player_pieces[self.active_player].x > 0 {
+                moves.push(Move::Left);
+            }
+            if self.player_pieces[self.active_player].x < 8 {
+                moves.push(Move::Right);
+            }
+            if self.walls_remaining[self.active_player] > 0 {
+                moves.push(Move::PlaceWall);
+            }
+            return moves;
         }
     }
 
