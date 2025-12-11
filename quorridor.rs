@@ -77,49 +77,13 @@ impl Coordinates for Wall {
     fn coords(&self) -> (i64, i64) { (self.x, self.y) }
 }
 
-pub fn move_player_up(game: &mut Quorridor) {
+pub fn move_player(game: &mut Quorridor, x, y) {
     let idx = game.active_player;
-    let current_x = game.player_pieces[idx].x;
-    let current_y = game.player_pieces[idx].y;
-    let candidate_y = current_y + 1;
-    
-    if candidate_y < 9 && !game.wall_collision(current_x, candidate_y) && !game.player_collision(idx, current_x, candidate_y) {
-        game.player_pieces[idx].y = candidate_y;
-    }
+    game.player_pieces[idx].x = game.player_pieces[idx].x + x;
+    game.player_pieces[idx].y = game.player_pieces[idx].y + y;
+
 }
 
-pub fn move_player_left(game: &mut Quorridor) {
-    let idx = game.active_player;
-    let current_x = game.player_pieces[idx].x;
-    let current_y = game.player_pieces[idx].y;
-    let candidate_x = current_x - 1;
-    
-    if candidate_x >= 0 && !game.wall_collision(candidate_x, current_y) && !game.player_collision(idx, candidate_x, current_y) {
-        game.player_pieces[idx].x = candidate_x;
-    }
-}
-
-pub fn move_player_right(game: &mut Quorridor) {
-    let idx = game.active_player;
-    let current_x = game.player_pieces[idx].x;
-    let current_y = game.player_pieces[idx].y;
-    let candidate_x = current_x + 1;
-    
-    if candidate_x < 9 && !game.wall_collision(candidate_x, current_y) && !game.player_collision(idx, candidate_x, current_y) {
-        game.player_pieces[idx].x = candidate_x;
-    }
-}
-
-pub fn move_player_down(game: &mut Quorridor) {
-    let idx = game.active_player;
-    let current_x = game.player_pieces[idx].x;
-    let current_y = game.player_pieces[idx].y;
-    let candidate_y = current_y - 1;
-    
-    if candidate_y >= 0 && !game.wall_collision(current_x, candidate_y) && !game.player_collision(idx, current_x, candidate_y) {
-        game.player_pieces[idx].y = candidate_y;
-    }
-}
 
 pub fn shortest_path_to_goal(game: &Quorridor, player_idx: usize) -> Option<usize> {
     use std::collections::{VecDeque, HashSet};
