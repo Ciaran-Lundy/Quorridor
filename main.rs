@@ -5,16 +5,15 @@ use mcts::transposition_table::*;
 use itertools::iproduct;
 use std::io::{self, Write};
 
+mod piece;
+mod wall;
 mod quorridor;
-use quorridor::{Quorridor, 
-                Piece,
-                Wall,
-                Orientation,
-                WallPlacementResult,
-                move_player,
-                place_wall,
-                shortest_path_to_goal
-               };
+mod tests;
+mod mcts_impl;
+
+use piece::Piece;
+use wall::{Wall, Orientation, WallPlacementResult, place_wall};
+use quorridor::{Quorridor, move_player};
  
 #[derive(Clone, Debug, PartialEq)]
 pub enum Move {
@@ -25,70 +24,6 @@ pub enum Move {
     PlaceWall(i64, i64, Orientation),
 }
 
-
-impl Quorridor {
-
-    fn get_movement_moves(&self) -> Vec<Move> {
-        let mut moves = Vec::new();
-        let current_x = self.player_pieces[self.active_player].x;
-        let current_y = self.player_pieces[self.active_player].y;
-        for (x, y, mov) in [(0, 1, Move::Up), 
-                            (0, -1, Move::Down), 
-                            (-1, 0, Move::Left), 
-                            (1, 0, Move::Right)] {
-            let new_x = current_x + x;
-            let new_y = current_y + y;
-            if new_x >= 0 && new_x < 9 && new_y >= 0 && new_y < 9 {
-                if !self.wall_collision(current_x + x, current_y + y) && !self.player_collision(self.active_player, current_x + x + x, current_y + y + y) {
-                    moves.push(mov);
-                }
-            }
-        }
-        moves
-    }
-    fn validate_wall_move(&self, x: i64, y: i64, orientation: &Orientation) -> bool {
-        if self.walls_remaining[self.active_player] == 0 {
-            return false;
-        }
-        if orientation == &Orientation::Horizontal && x == 8 {
-            return false;
-        }
-        if orientation == &Orientation::Vertical && y == 8 {
-            return false;
-        }
-        if self.wall_crosses(x, y, *orientation) {
-            return false;
-        }
-        if self.wall_overlaps(x, y, *orientation) {
-            return false;
-        }
-        //if self.clone().wall_blocks_path(x, y, *orientation) {
-        //    return false;
-        //}
-        true
-    }
-    fn get_wall_moves(&self) -> Vec<Move> {
-        let mut moves = Vec::new();
-        
-        if self.walls_remaining[self.active_player] == 0 {
-            return moves;
-        }
-        
-        for (x, y, orientation) in iproduct!(0..8, 0..9, [Orientation::Horizontal, Orientation::Vertical].iter()) {
-            if !self.validate_wall_move(x, y, orientation) {
-                continue;
-            }
-            moves.push(Move::PlaceWall(x, y, orientation.clone()));  
-            }
-        moves
-        // If the current player has no walls remaining, return an empty vector
-    }
-    fn game_over(&self) -> bool {
-            let player_0_progress_on_board = self.player_pieces[0].y;
-            let player_1_progress_on_board = 9 - self.player_pieces[1].y;
-            player_0_progress_on_board == 9 || player_1_progress_on_board == 9
-    }
-}
  
 impl GameState for Quorridor {
     type Move = Move;
@@ -127,7 +62,6 @@ impl GameState for Quorridor {
 }
 
 
- 
 fn display_board(game: &Quorridor) {
     // Build board representation
     let mut player_grid = [[' '; 9]; 9];  // 9x9 grid for players
@@ -204,12 +138,12 @@ fn get_ai_move(game: &Quorridor) -> Move {
     println!("\nAI is thinking...");
     let mut mcts = MCTSManager::new(
         game.clone(), 
-        MyMCTS, 
-        MyEvaluator, 
+        mcts_impl::MyMCTS, 
+        mcts_impl::MyEvaluator, 
         UCTPolicy::new(1.414),  // Standard UCT exploration constant
         ApproxTable::new(8192)
     );
-    mcts.playout_n_parallel(100, 4);
+    mcts.playout_n_parallel(1000, 4);
     
     match mcts.best_move() {
         Some(mov) => {
@@ -325,78 +259,3 @@ fn main() {
 }
 
  
-impl TranspositionHash for Quorridor {
-    fn hash(&self) -> u64 {
-        let mut hash: u64 = 0;
-        
-        hash ^= self.active_player as u64;
-        // Hash both players' positions
-        hash = hash.wrapping_mul(31).wrapping_add(((self.player_pieces[0].x as u64) << 32) | (self.player_pieces[0].y as u64));
-        hash = hash.wrapping_mul(31).wrapping_add(((self.player_pieces[1].x as u64) << 32) | (self.player_pieces[1].y as u64));
-        
-        // Hash all walls
-        for wall in &self.walls {
-            if wall.x != 99 && wall.y != 99 {  // Skip uninitialized walls
-                hash = hash.wrapping_mul(31).wrapping_add((wall.x as u64) << 4 | (wall.y as u64));
-            }
-        }
-
-        hash
-    }
-}
- 
-struct MyEvaluator;
- 
-impl Evaluator<MyMCTS> for MyEvaluator {
-    type StateEvaluation = i64;
- 
-    fn evaluate_new_state(&self, state: &Quorridor, moves: &Vec<Move>,
-        _: Option<SearchHandle<MyMCTS>>)
-        -> (Vec<()>, i64) {
-        // Check for terminal states
-        if state.player_pieces[0].y >= 8 {
-            return (vec![(); moves.len()], 100000);  // Player 0 wins
-        }
-        if state.player_pieces[1].y <= 0 {
-            return (vec![(); moves.len()], -100000);  // Player 1 wins
-        }
-        
-        // Use actual BFS shortest path distance to goal
-        let p0_distance = shortest_path_to_goal(state, 0).unwrap_or(1000);
-        let p1_distance = shortest_path_to_goal(state, 1).unwrap_or(1000);
-        
-        // Lower distance is better - higher score for player 0 when p1 is farther
-        let score = (p1_distance as i64 - p0_distance as i64) * 1000;
-        
-        (vec![(); moves.len()], score)
-    }
-    
-    fn interpret_evaluation_for_player(&self, evaln: &i64, player: &usize) -> i64 {
-        // Return evaluation from the given player's perspective
-        if *player == 0 {
-            *evaln
-        } else {
-            -evaln  // Flip sign for player 1
-        }
-    }
-    
-    fn evaluate_existing_state(&self, _: &Quorridor,  evaln: &i64, _: SearchHandle<MyMCTS>) -> i64 {
-        *evaln
-    }
-}
- 
-#[derive(Default)]
-struct MyMCTS;
- 
-impl MCTS for MyMCTS {
-    type State = Quorridor;
-    type Eval = MyEvaluator;
-    type NodeData = ();
-    type ExtraThreadData = ();
-    type TreePolicy = UCTPolicy;
-    type TranspositionTable = ApproxTable<Self>;
-
-    fn cycle_behaviour(&self) -> CycleBehaviour<Self> {
-        CycleBehaviour::UseCurrentEvalWhenCycleDetected
-    }
-}

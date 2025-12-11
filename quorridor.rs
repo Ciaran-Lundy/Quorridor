@@ -1,4 +1,11 @@
-#[derive(Clone, Debug, Default, PartialEq)]
+use crate::piece::Piece;
+use crate::wall::{Wall, Orientation};
+use itertools::iproduct;
+
+pub use crate::piece::move_player;
+pub use crate::wall::place_wall;
+
+#[derive(Clone, Debug, PartialEq)]
 pub struct Quorridor {
     pub player_pieces: [Piece; 2],
     pub active_player: usize,
@@ -6,64 +13,170 @@ pub struct Quorridor {
     pub walls_remaining: [usize; 2],
 }
 
-trait Coordinates {
-    fn coords(&self) -> (i64, i64);
-}
 
-#[derive(Copy, Clone, Debug, Default, PartialEq)]
-pub struct Piece {
-    pub x: i64,
-    pub y: i64,
-}
-
-impl Coordinates for Piece {
-    fn coords(&self) -> (i64, i64) { (self.x, self.y) }
-}
-
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub enum Orientation {
-    Horizontal,
-    Vertical,
-}
-
-impl Default for Orientation {
-    fn default() -> Self { Orientation::Horizontal }
-}
-
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub enum WallPlacementResult {
-    Success,
-    NoWallsRemaining,
-    Crosses,
-    Overlaps,
-    BlocksPath,
-}
-
-#[derive(Copy, Clone, Debug, Default, PartialEq)]
-pub struct Wall {
-    pub x: i64,
-    pub y: i64,
-    pub orientation: Orientation,
-}
-
-impl Wall {
-    pub fn positions(&self) -> [(i64, i64); 2] {
-        match self.orientation {
-            Orientation::Horizontal => [(self.x, self.y), (self.x + 1, self.y)],
-            Orientation::Vertical => [(self.x, self.y), (self.x, self.y + 1)],
+impl Quorridor {
+    pub fn wall_collision(&self, target_x: i64, target_y: i64) -> bool {
+        let current_x = self.player_pieces[self.active_player].x;
+        let current_y = self.player_pieces[self.active_player].y;
+        
+        for wall in &self.walls {
+            if wall.x == 99 { continue; }
+            
+            match wall.orientation {
+                Orientation::Horizontal => {
+                    if (current_y == wall.y - 1 && target_y == wall.y) || 
+                       (current_y == wall.y && target_y == wall.y - 1) {
+                        if current_x >= wall.x && current_x <= wall.x + 1 {
+                            return true;
+                        }
+                    }
+                }
+                Orientation::Vertical => {
+                    if (current_x == wall.x - 1 && target_x == wall.x) || 
+                       (current_x == wall.x && target_x == wall.x - 1) {
+                        if current_y >= wall.y && current_y <= wall.y + 1 {
+                            return true;
+                        }
+                    }
+                }
+            }
         }
+        false
+    }
+
+    pub fn player_collision(&self, player_idx: usize, x: i64, y: i64) -> bool {
+        let opponent_idx = 1 - player_idx;
+        self.player_pieces[opponent_idx].x == x && self.player_pieces[opponent_idx].y == y
+    }
+    
+    pub fn wall_crosses(&self, x: i64, y: i64, orientation: Orientation) -> bool {
+        self.walls.iter().any(|other| {
+            if other.x == 99 { return false; }
+            if orientation == other.orientation {
+                return false;
+            }
+            match (orientation, other.orientation) {
+                (Orientation::Horizontal, Orientation::Vertical) => {
+                    other.x >= x && other.x <= x + 1 && y >= other.y && y <= other.y + 1
+                }
+                (Orientation::Vertical, Orientation::Horizontal) => {
+                    other.x >= x && other.x <= x + 1 && other.y >= y && other.y <= y + 1
+                }
+                _ => false,
+            }
+        })
+    }
+    
+    pub fn wall_overlaps(&self, x: i64, y: i64, orientation: Orientation) -> bool {
+        let new_positions = match orientation {
+            Orientation::Horizontal => [(x, y), (x + 1, y)],
+            Orientation::Vertical => [(x, y), (x, y + 1)],
+        };
+        
+        self.walls.iter().any(|other| {
+            if other.x == 99 { return false; }
+            if other.orientation != orientation { return false; }
+            
+            other.positions().iter().any(|pos| new_positions.contains(pos))
+        })
+    }
+    
+    pub fn both_players_have_path(&self) -> bool {
+        has_path_to_goal(self, 0) && has_path_to_goal(self, 1)
+    }
+    
+    pub fn wall_blocks_path(&mut self, x: i64, y: i64, orientation: Orientation) -> bool {
+        let idx = self.active_player;
+        let walls_placed = 9 - self.walls_remaining[idx];
+        let wall_index = if idx == 0 {
+            walls_placed
+        } else {
+            9 + walls_placed
+        };
+        
+        let new_wall = Wall { x, y, orientation };
+        let old_wall = self.walls[wall_index];
+        self.walls[wall_index] = new_wall;
+        
+        let blocks = !self.both_players_have_path();
+        
+        self.walls[wall_index] = old_wall;
+        blocks
+    }
+
+    pub fn get_movement_moves(&self) -> Vec<crate::Move> {
+        let mut moves = Vec::new();
+        let current_x = self.player_pieces[self.active_player].x;
+        let current_y = self.player_pieces[self.active_player].y;
+        for (x, y, mov) in [(0, 1, crate::Move::Up), 
+                            (0, -1, crate::Move::Down), 
+                            (-1, 0, crate::Move::Left), 
+                            (1, 0, crate::Move::Right)] {
+            let new_x = current_x + x;
+            let new_y = current_y + y;
+            if new_x >= 0 && new_x < 9 && new_y >= 0 && new_y < 9 {
+                if !self.wall_collision(current_x + x, current_y + y) && !self.player_collision(self.active_player, current_x + x + x, current_y + y + y) {
+                    moves.push(mov);
+                }
+            }
+        }
+        moves
+    }
+
+    fn validate_wall_move(&self, x: i64, y: i64, orientation: &Orientation) -> bool {
+        if self.walls_remaining[self.active_player] == 0 {
+            return false;
+        }
+        if orientation == &Orientation::Horizontal && x == 8 {
+            return false;
+        }
+        if orientation == &Orientation::Vertical && y == 8 {
+            return false;
+        }
+        if self.wall_crosses(x, y, *orientation) {
+            return false;
+        }
+        if self.wall_overlaps(x, y, *orientation) {
+            return false;
+        }
+        if self.clone().wall_blocks_path(x, y, *orientation) {
+            return false;
+        }
+        true
+    }
+
+    pub fn get_wall_moves(&self) -> Vec<crate::Move> {
+        let mut moves = Vec::new();
+        
+        if self.walls_remaining[self.active_player] == 0 {
+            return moves;
+        }
+        
+        for (x, y, orientation) in iproduct!(0..8, 0..9, [Orientation::Horizontal, Orientation::Vertical].iter()) {
+            if !self.validate_wall_move(x, y, orientation) {
+                continue;
+            }
+            moves.push(crate::Move::PlaceWall(x, y, orientation.clone()));
+            }
+        moves
+    }
+
+    pub fn game_over(&self) -> bool {
+            let player_0_progress_on_board = self.player_pieces[0].y;
+            let player_1_progress_on_board = 9 - self.player_pieces[1].y;
+            player_0_progress_on_board == 9 || player_1_progress_on_board == 9
     }
 }
 
-impl Coordinates for Wall {
-    fn coords(&self) -> (i64, i64) { (self.x, self.y) }
-}
-
-pub fn move_player(game: &mut Quorridor, x: i64, y: i64) {
-    let idx = game.active_player;
-    game.player_pieces[idx].x = game.player_pieces[idx].x + x;
-    game.player_pieces[idx].y = game.player_pieces[idx].y + y;
-
+impl Default for Quorridor {
+    fn default() -> Self {
+        Quorridor {
+            player_pieces: [Piece::default(); 2],
+            active_player: 0,
+            walls: [Wall::default(); 18],
+            walls_remaining: [9, 9],
+        }
+    }
 }
 
 
@@ -116,362 +229,51 @@ pub fn shortest_path_to_goal(game: &Quorridor, player_idx: usize) -> Option<usiz
     None
 }
 
-pub fn place_wall(game: &mut Quorridor, x: i64, y: i64, orientation: Orientation) -> WallPlacementResult {
-    let idx = game.active_player;
+pub fn has_path_to_goal(game: &Quorridor, player_idx: usize) -> bool {
+    use std::collections::HashSet;
     
-    let new_wall = Wall { x, y, orientation };
-    let walls_placed = 9 - game.walls_remaining[idx];
-    let wall_index = if idx == 0 {
-        walls_placed
-    } else {
-        9 + walls_placed
-    };
+    let start = game.player_pieces[player_idx];
+    let goal_y = if player_idx == 0 { 8 } else { 0 };
     
-    game.walls[wall_index] = new_wall;
-    game.walls_remaining[idx] -= 1;
-    WallPlacementResult::Success
-}
-
-impl Quorridor {
-    pub fn wall_collision(&self, target_x: i64, target_y: i64) -> bool {
-        let current_x = self.player_pieces[self.active_player].x;
-        let current_y = self.player_pieces[self.active_player].y;
-        
-        for wall in &self.walls {
-            if wall.x == 99 { continue; }
-            
-            match wall.orientation {
-                Orientation::Horizontal => {
-                    if (current_y == wall.y - 1 && target_y == wall.y) || 
-                       (current_y == wall.y && target_y == wall.y - 1) {
-                        if current_x >= wall.x && current_x <= wall.x + 1 {
-                            return true;
-                        }
-                    }
-                }
-                Orientation::Vertical => {
-                    if (current_x == wall.x - 1 && target_x == wall.x) || 
-                       (current_x == wall.x && target_x == wall.x - 1) {
-                        if current_y >= wall.y && current_y <= wall.y + 1 {
-                            return true;
-                        }
-                    }
-                }
-            }
+    let mut visited = HashSet::new();
+    let mut stack = Vec::new();
+    
+    stack.push((start.x, start.y));
+    visited.insert((start.x, start.y));
+    
+    while let Some((x, y)) = stack.pop() {
+        if y == goal_y {
+            return true;
         }
-        false
-    }
-
-    pub fn player_collision(&self, player_idx: usize, x: i64, y: i64) -> bool {
-        let opponent_idx = 1 - player_idx;
-        self.player_pieces[opponent_idx].x == x && self.player_pieces[opponent_idx].y == y
-    }
-    
-    pub fn wall_crosses(&self, x: i64, y: i64, orientation: Orientation) -> bool {
-        self.walls.iter().any(|other| {
-            if other.x == 99 { return false; }
-            if orientation == other.orientation {
-                return false;
+        
+        let moves = [
+            (x + 1, y),
+            (x - 1, y),
+            (x, y + 1),
+            (x, y - 1),
+        ];
+        
+        for (nx, ny) in moves {
+            if nx < 0 || nx >= 9 || ny < 0 || ny >= 9 {
+                continue;
             }
             
-            match (orientation, other.orientation) {
-                (Orientation::Horizontal, Orientation::Vertical) => {
-                    other.x >= x && other.x <= x + 1 && y >= other.y && y <= other.y + 1
-                }
-                (Orientation::Vertical, Orientation::Horizontal) => {
-                    other.x >= x && other.x <= x + 1 && other.y >= y && other.y <= y + 1
-                }
-                _ => false,
+            if visited.contains(&(nx, ny)) {
+                continue;
             }
-        })
-    }
-    
-    pub fn wall_overlaps(&self, x: i64, y: i64, orientation: Orientation) -> bool {
-        let new_positions = match orientation {
-            Orientation::Horizontal => [(x, y), (x + 1, y)],
-            Orientation::Vertical => [(x, y), (x, y + 1)],
-        };
-        
-        self.walls.iter().any(|other| {
-            if other.x == 99 { return false; }
-            if other.orientation != orientation { return false; }
             
-            other.positions().iter().any(|pos| new_positions.contains(pos))
-        })
-    }
-    
-    pub fn both_players_have_path(&self) -> bool {
-        shortest_path_to_goal(self, 0).is_some() && shortest_path_to_goal(self, 1).is_some()
-    }
-    
-    pub fn wall_blocks_path(&mut self, x: i64, y: i64, orientation: Orientation) -> bool {
-        let idx = self.active_player;
-        let walls_placed = 9 - self.walls_remaining[idx];
-        let wall_index = if idx == 0 {
-            walls_placed
-        } else {
-            9 + walls_placed
-        };
-        
-        let new_wall = Wall { x, y, orientation };
-        let old_wall = self.walls[wall_index];
-        self.walls[wall_index] = new_wall;
-        
-        let blocks = !self.both_players_have_path();
-        
-        self.walls[wall_index] = old_wall;
-        blocks
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn create_test_game() -> Quorridor {
-        Quorridor {
-            player_pieces: [Piece { x: 4, y: 0 }, Piece { x: 4, y: 8 }],
-            active_player: 0,
-            walls: [Wall { x: 99, y: 99, orientation: Orientation::Horizontal }; 18],
-            walls_remaining: [9, 9],
+            if game.wall_collision(nx, ny) {
+                continue;
+            }
+            
+            if game.player_collision(player_idx, nx, ny) {
+                continue;
+            }
+            
+            visited.insert((nx, ny));
+            stack.push((nx, ny));
         }
     }
-
-    #[test]
-    fn test_horizontal_wall_in_bounds() {
-        let mut game = create_test_game();
-        let result = place_wall(&mut game, 3, 4, Orientation::Horizontal);
-        assert_eq!(result, WallPlacementResult::Success);
-        assert_eq!(game.walls_remaining[0], 8);
-    }
-
-    #[test]
-    fn test_vertical_wall_in_bounds() {
-        let mut game = create_test_game();
-        let result = place_wall(&mut game, 3, 4, Orientation::Vertical);
-        assert_eq!(result, WallPlacementResult::Success);
-        assert_eq!(game.walls_remaining[0], 8);
-    }
-
-    #[test]
-    fn test_horizontal_wall_at_max_x() {
-        let mut game = create_test_game();
-        let result = place_wall(&mut game, 7, 4, Orientation::Horizontal);
-        assert_eq!(result, WallPlacementResult::Success);
-    }
-
-    #[test]
-    fn test_horizontal_wall_at_max_y() {
-        let mut game = create_test_game();
-        let result = place_wall(&mut game, 3, 8, Orientation::Horizontal);
-        assert_eq!(result, WallPlacementResult::Success);
-    }
-
-    #[test]
-    fn test_vertical_wall_at_max_y() {
-        let mut game = create_test_game();
-        let result = place_wall(&mut game, 3, 7, Orientation::Vertical);
-        assert_eq!(result, WallPlacementResult::Success);
-    }
-
-    #[test]
-    fn test_horizontal_wall_overlap_same_position() {
-        let mut game = create_test_game();
-        place_wall(&mut game, 3, 4, Orientation::Horizontal);
-        let result = place_wall(&mut game, 3, 4, Orientation::Horizontal);
-        assert_eq!(result, WallPlacementResult::Overlaps);
-    }
-
-    #[test]
-    fn test_horizontal_wall_overlap_adjacent() {
-        let mut game = create_test_game();
-        place_wall(&mut game, 3, 4, Orientation::Horizontal);
-        let result = place_wall(&mut game, 4, 4, Orientation::Horizontal);
-        assert_eq!(result, WallPlacementResult::Overlaps);
-    }
-
-    #[test]
-    fn test_vertical_wall_overlap_same_position() {
-        let mut game = create_test_game();
-        place_wall(&mut game, 3, 4, Orientation::Vertical);
-        let result = place_wall(&mut game, 3, 4, Orientation::Vertical);
-        assert_eq!(result, WallPlacementResult::Overlaps);
-    }
-
-    #[test]
-    fn test_vertical_wall_overlap_adjacent() {
-        let mut game = create_test_game();
-        place_wall(&mut game, 3, 4, Orientation::Vertical);
-        let result = place_wall(&mut game, 3, 5, Orientation::Vertical);
-        assert_eq!(result, WallPlacementResult::Overlaps);
-    }
-
-    #[test]
-    fn test_perpendicular_walls_at_same_point_cross() {
-        let mut game = create_test_game();
-        place_wall(&mut game, 3, 4, Orientation::Horizontal);
-        let result = place_wall(&mut game, 3, 4, Orientation::Vertical);
-        assert_eq!(result, WallPlacementResult::Crosses);
-    }
-
-    #[test]
-    fn test_walls_crossing_detected() {
-        let mut game = create_test_game();
-        place_wall(&mut game, 4, 7, Orientation::Horizontal);
-        let result = place_wall(&mut game, 5, 6, Orientation::Vertical);
-        assert_eq!(result, WallPlacementResult::Crosses);
-    }
-
-    #[test]
-    fn test_walls_crossing_opposite_order() {
-        let mut game = create_test_game();
-        place_wall(&mut game, 5, 6, Orientation::Vertical);
-        let result = place_wall(&mut game, 4, 7, Orientation::Horizontal);
-        assert_eq!(result, WallPlacementResult::Crosses);
-    }
-
-    #[test]
-    fn test_walls_not_crossing_far_vertical() {
-        let mut game = create_test_game();
-        place_wall(&mut game, 4, 7, Orientation::Horizontal);
-        let result = place_wall(&mut game, 6, 6, Orientation::Vertical);
-        assert_eq!(result, WallPlacementResult::Success);
-    }
-
-    #[test]
-    fn test_no_walls_remaining() {
-        let mut game = create_test_game();
-        game.walls_remaining[0] = 0;
-        let result = place_wall(&mut game, 3, 4, Orientation::Horizontal);
-        assert_eq!(result, WallPlacementResult::NoWallsRemaining);
-    }
-
-    #[test]
-    fn test_wall_positions_horizontal() {
-        let wall = Wall { x: 3, y: 4, orientation: Orientation::Horizontal };
-        let positions = wall.positions();
-        assert_eq!(positions, [(3, 4), (4, 4)]);
-    }
-
-    #[test]
-    fn test_wall_positions_vertical() {
-        let wall = Wall { x: 3, y: 4, orientation: Orientation::Vertical };
-        let positions = wall.positions();
-        assert_eq!(positions, [(3, 4), (3, 5)]);
-    }
-
-    #[test]
-    fn test_wall_crosses_method_horizontal_vertical() {
-        let h_wall = Wall { x: 4, y: 7, orientation: Orientation::Horizontal };
-        let v_wall = Wall { x: 5, y: 6, orientation: Orientation::Vertical };
-        assert!(h_wall.crosses(&v_wall));
-        assert!(v_wall.crosses(&h_wall));
-    }
-
-    #[test]
-    fn test_wall_crosses_method_no_crossing() {
-        let h_wall = Wall { x: 4, y: 7, orientation: Orientation::Horizontal };
-        let v_wall = Wall { x: 6, y: 6, orientation: Orientation::Vertical };
-        assert!(!h_wall.crosses(&v_wall));
-        assert!(!v_wall.crosses(&h_wall));
-    }
-
-    #[test]
-    fn test_wall_crosses_same_orientation_returns_false() {
-        let h_wall1 = Wall { x: 4, y: 7, orientation: Orientation::Horizontal };
-        let h_wall2 = Wall { x: 5, y: 7, orientation: Orientation::Horizontal };
-        assert!(!h_wall1.crosses(&h_wall2));
-    }
-
-    #[test]
-    fn test_multiple_walls_placement() {
-        let mut game = create_test_game();
-        assert_eq!(place_wall(&mut game, 0, 0, Orientation::Horizontal), WallPlacementResult::Success);
-        assert_eq!(place_wall(&mut game, 2, 0, Orientation::Horizontal), WallPlacementResult::Success);
-        assert_eq!(place_wall(&mut game, 0, 2, Orientation::Vertical), WallPlacementResult::Success);
-        assert_eq!(place_wall(&mut game, 2, 2, Orientation::Vertical), WallPlacementResult::Success);
-        assert_eq!(game.walls_remaining[0], 5);
-    }
-
-    #[test]
-    fn test_wall_placement_alternating_players() {
-        let mut game = create_test_game();
-        assert_eq!(place_wall(&mut game, 3, 4, Orientation::Horizontal), WallPlacementResult::Success);
-        assert_eq!(game.walls_remaining[0], 8);
-        
-        game.active_player = 1;
-        assert_eq!(place_wall(&mut game, 5, 4, Orientation::Horizontal), WallPlacementResult::Success);
-        assert_eq!(game.walls_remaining[1], 8);
-    }
-
-    #[test]
-    fn test_edge_case_wall_at_origin() {
-        let mut game = create_test_game();
-        assert_eq!(place_wall(&mut game, 0, 0, Orientation::Horizontal), WallPlacementResult::Success);
-    }
-
-    #[test]
-    fn test_edge_case_wall_at_max_corner() {
-        let mut game = create_test_game();
-        assert_eq!(place_wall(&mut game, 7, 7, Orientation::Vertical), WallPlacementResult::Success);
-    }
-
-    #[test]
-    fn test_cross_detection_at_start_of_horizontal() {
-        let mut game = create_test_game();
-        place_wall(&mut game, 4, 7, Orientation::Horizontal);
-        let result = place_wall(&mut game, 4, 6, Orientation::Vertical);
-        assert_eq!(result, WallPlacementResult::Crosses);
-    }
-
-    #[test]
-    fn test_cross_detection_at_end_of_horizontal() {
-        let mut game = create_test_game();
-        place_wall(&mut game, 4, 7, Orientation::Horizontal);
-        let result = place_wall(&mut game, 5, 6, Orientation::Vertical);
-        assert_eq!(result, WallPlacementResult::Crosses);
-    }
-
-    #[test]
-    fn test_no_cross_just_before_horizontal() {
-        let mut game = create_test_game();
-        place_wall(&mut game, 4, 7, Orientation::Horizontal);
-        let result = place_wall(&mut game, 3, 6, Orientation::Vertical);
-        assert_eq!(result, WallPlacementResult::Success);
-    }
-
-    #[test]
-    fn test_no_cross_just_after_horizontal() {
-        let mut game = create_test_game();
-        place_wall(&mut game, 4, 7, Orientation::Horizontal);
-        let result = place_wall(&mut game, 6, 6, Orientation::Vertical);
-        assert_eq!(result, WallPlacementResult::Success);
-    }
-
-    #[test]
-    fn test_walls_crossing_at_corner() {
-        let mut game = create_test_game();
-        place_wall(&mut game, 4, 7, Orientation::Horizontal);
-        let result = place_wall(&mut game, 4, 6, Orientation::Vertical);
-        assert_eq!(result, WallPlacementResult::Crosses);
-    }
-
-    #[test]
-    fn test_shortest_path_exists_initial() {
-        let game = create_test_game();
-        assert!(shortest_path_to_goal(&game, 0).is_some());
-        assert!(shortest_path_to_goal(&game, 1).is_some());
-    }
-
-    #[test]
-    fn test_shortest_path_length_initial() {
-        let game = create_test_game();
-        let p0_path = shortest_path_to_goal(&game, 0);
-        assert!(p0_path.is_some());
-        assert_eq!(p0_path.unwrap(), 9);
-        
-        let p1_path = shortest_path_to_goal(&game, 1);
-        assert!(p1_path.is_some());
-        assert_eq!(p1_path.unwrap(), 9);
-    }
+    
+    false
 }
