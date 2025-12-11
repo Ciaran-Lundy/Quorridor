@@ -83,7 +83,7 @@ pub fn move_player_up(game: &mut Quorridor) {
     let current_y = game.player_pieces[idx].y;
     let candidate_y = current_y + 1;
     
-    if candidate_y < 9 && !wall_collision(game, current_x, candidate_y) && !player_collision(game, idx, current_x, candidate_y) {
+    if candidate_y < 9 && !game.wall_collision(current_x, candidate_y) && !game.player_collision(idx, current_x, candidate_y) {
         game.player_pieces[idx].y = candidate_y;
     }
 }
@@ -94,7 +94,7 @@ pub fn move_player_left(game: &mut Quorridor) {
     let current_y = game.player_pieces[idx].y;
     let candidate_x = current_x - 1;
     
-    if candidate_x >= 0 && !wall_collision(game, candidate_x, current_y) && !player_collision(game, idx, candidate_x, current_y) {
+    if candidate_x >= 0 && !game.wall_collision(candidate_x, current_y) && !game.player_collision(idx, candidate_x, current_y) {
         game.player_pieces[idx].x = candidate_x;
     }
 }
@@ -105,7 +105,7 @@ pub fn move_player_right(game: &mut Quorridor) {
     let current_y = game.player_pieces[idx].y;
     let candidate_x = current_x + 1;
     
-    if candidate_x < 9 && !wall_collision(game, candidate_x, current_y) && !player_collision(game, idx, candidate_x, current_y) {
+    if candidate_x < 9 && !game.wall_collision(candidate_x, current_y) && !game.player_collision(idx, candidate_x, current_y) {
         game.player_pieces[idx].x = candidate_x;
     }
 }
@@ -116,7 +116,7 @@ pub fn move_player_down(game: &mut Quorridor) {
     let current_y = game.player_pieces[idx].y;
     let candidate_y = current_y - 1;
     
-    if candidate_y >= 0 && !wall_collision(game, current_x, candidate_y) && !player_collision(game, idx, current_x, candidate_y) {
+    if candidate_y >= 0 && !game.wall_collision(current_x, candidate_y) && !game.player_collision(idx, current_x, candidate_y) {
         game.player_pieces[idx].y = candidate_y;
     }
 }
@@ -154,11 +154,11 @@ pub fn shortest_path_to_goal(game: &Quorridor, player_idx: usize) -> Option<usiz
                 continue;
             }
             
-            if wall_collision(game, nx, ny) {
+            if game.wall_collision(nx, ny) {
                 continue;
             }
             
-            if player_collision(game, player_idx, nx, ny) {
+            if game.player_collision(player_idx, nx, ny) {
                 continue;
             }
             
@@ -225,34 +225,48 @@ pub fn place_wall(game: &mut Quorridor, x: i64, y: i64, orientation: Orientation
     }
 }
 
-fn wall_collision(game: &Quorridor, x: i64, y: i64) -> bool {
-    for wall in &game.walls {
-        if wall.x == 99 { continue; }
+impl Quorridor {
+    pub fn wall_collision(&self, target_x: i64, target_y: i64) -> bool {
+        let current_x = self.player_pieces[self.active_player].x;
+        let current_y = self.player_pieces[self.active_player].y;
         
-        let positions = wall.positions();
-        match wall.orientation {
-            Orientation::Horizontal => {
-                for (wx, wy) in positions {
-                    if x == wx && (y == wy || y == wy - 1) {
-                        return true;
+        for wall in &self.walls {
+            if wall.x == 99 { continue; }
+            
+            match wall.orientation {
+                Orientation::Horizontal => {
+                    // Horizontal wall at (x, y) spans (x, y) to (x+1, y)
+                    // It blocks vertical movement between y-1 and y
+                    // Check if we're moving vertically across this wall
+                    if (current_y == wall.y - 1 && target_y == wall.y) || 
+                       (current_y == wall.y && target_y == wall.y - 1) {
+                        // Check if our x position crosses this wall segment
+                        if current_x >= wall.x && current_x <= wall.x + 1 {
+                            return true;
+                        }
                     }
                 }
-            }
-            Orientation::Vertical => {
-                for (wx, wy) in positions {
-                    if y == wy && (x == wx || x == wx - 1) {
-                        return true;
+                Orientation::Vertical => {
+                    // Vertical wall at (x, y) spans (x, y) to (x, y+1)
+                    // It blocks horizontal movement between x-1 and x
+                    // Check if we're moving horizontally across this wall
+                    if (current_x == wall.x - 1 && target_x == wall.x) || 
+                       (current_x == wall.x && target_x == wall.x - 1) {
+                        // Check if our y position crosses this wall segment
+                        if current_y >= wall.y && current_y <= wall.y + 1 {
+                            return true;
+                        }
                     }
                 }
             }
         }
+        false
     }
-    false
-}
 
-fn player_collision(game: &Quorridor, player_idx: usize, x: i64, y: i64) -> bool {
-    let opponent_idx = 1 - player_idx;
-    game.player_pieces[opponent_idx].x == x && game.player_pieces[opponent_idx].y == y
+    pub fn player_collision(&self, player_idx: usize, x: i64, y: i64) -> bool {
+        let opponent_idx = 1 - player_idx;
+        self.player_pieces[opponent_idx].x == x && self.player_pieces[opponent_idx].y == y
+    }
 }
 
 #[cfg(test)]
