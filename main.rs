@@ -21,6 +21,18 @@ pub enum Move {
     Down,
     Left,
     Right,
+    UpJump,
+    DownJump,
+    LeftJump,
+    RightJump,
+    UpLeft,
+    UpRight,
+    DownLeft,
+    DownRight,
+    LeftUp,
+    LeftDown,
+    RightUp,
+    RightDown,
     PlaceWall(i64, i64, Orientation),
 }
 
@@ -39,6 +51,7 @@ impl GameState for Quorridor {
             vec![]
         } else {
             let mut moves = self.get_movement_moves();
+            moves.extend(self.get_special_moves());
             moves.extend(self.get_wall_moves());
             moves
         }
@@ -46,10 +59,22 @@ impl GameState for Quorridor {
 
     fn make_move(&mut self, mov: &Self::Move) {
         let success = match mov {
-            Move::Up => { move_player(self, 0, 2); true }      // Move by 2 in 18x18 grid
-            Move::Down => { move_player(self, 0, -2); true }    // Move by 2 in 18x18 grid
+            Move::Up => { move_player(self, 0, -2); true }      // Move by 2 in 18x18 grid
+            Move::Down => { move_player(self, 0, 2); true }    // Move by 2 in 18x18 grid
             Move::Left => { move_player(self, -2, 0); true }    // Move by 2 in 18x18 grid
             Move::Right => { move_player(self, 2, 0); true }    // Move by 2 in 18x18 grid
+            Move::UpJump => { move_player(self, 0, -4); true }
+            Move::DownJump => { move_player(self, 0, 4); true }
+            Move::LeftJump => { move_player(self, -4, 0); true }
+            Move::RightJump => { move_player(self, 4, 0); true }
+            Move::UpLeft => { move_player(self, -2, 2); true }
+            Move::UpRight => { move_player(self, -2, 2); true }
+            Move::DownLeft => { move_player(self, 2, -2); true }
+            Move::DownRight => { move_player(self, 2, -2); true }
+            Move::LeftUp => { move_player(self, -2, 2); true }
+            Move::LeftDown => { move_player(self, 2, -2); true }
+            Move::RightUp => { move_player(self, -2, 2); true }
+            Move::RightDown => { move_player(self, 2, -2); true }
             Move::PlaceWall(x, y, orientation) => {
                 place_wall(self, *x, *y, *orientation) == WallPlacementResult::Success
             }
@@ -63,89 +88,42 @@ impl GameState for Quorridor {
 
 
 fn display_board(game: &Quorridor) {
-    for line in &game.grid {
-        println!("{:?}", line);
+    let mut board = [
+        ["+", "---", "+", "---", "+", "---", "+", "---", "+", "---", "+", "---", "+", "---", "+", "---", "+", "---", "+", "  0"],
+        ["|", "   ", "|", "   ", "|", "   ", "|", "   ", "|", "   ", "|", "   ", "|", "   ", "|", "   ", "|", "   ", "|", "   "],
+        ["+", "---", "+", "---", "+", "---", "+", "---", "+", "---", "+", "---", "+", "---", "+", "---", "+", "---", "+", "  1"],
+        ["|", "   ", "|", "   ", "|", "   ", "|", "   ", "|", "   ", "|", "   ", "|", "   ", "|", "   ", "|", "   ", "|", "   "],
+        ["+", "---", "+", "---", "+", "---", "+", "---", "+", "---", "+", "---", "+", "---", "+", "---", "+", "---", "+", "  2"],
+        ["|", "   ", "|", "   ", "|", "   ", "|", "   ", "|", "   ", "|", "   ", "|", "   ", "|", "   ", "|", "   ", "|", "   "],
+        ["+", "---", "+", "---", "+", "---", "+", "---", "+", "---", "+", "---", "+", "---", "+", "---", "+", "---", "+", "  3"],
+        ["|", "   ", "|", "   ", "|", "   ", "|", "   ", "|", "   ", "|", "   ", "|", "   ", "|", "   ", "|", "   ", "|", "   "],
+        ["+", "---", "+", "---", "+", "---", "+", "---", "+", "---", "+", "---", "+", "---", "+", "---", "+", "---", "+", "  4"],
+        ["|", "   ", "|", "   ", "|", "   ", "|", "   ", "|", "   ", "|", "   ", "|", "   ", "|", "   ", "|", "   ", "|", "   "],
+        ["+", "---", "+", "---", "+", "---", "+", "---", "+", "---", "+", "---", "+", "---", "+", "---", "+", "---", "+", "  5"],
+        ["|", "   ", "|", "   ", "|", "   ", "|", "   ", "|", "   ", "|", "   ", "|", "   ", "|", "   ", "|", "   ", "|", "   "],
+        ["+", "---", "+", "---", "+", "---", "+", "---", "+", "---", "+", "---", "+", "---", "+", "---", "+", "---", "+", "  6"],
+        ["|", "   ", "|", "   ", "|", "   ", "|", "   ", "|", "   ", "|", "   ", "|", "   ", "|", "   ", "|", "   ", "|", "   "],
+        ["+", "---", "+", "---", "+", "---", "+", "---", "+", "---", "+", "---", "+", "---", "+", "---", "+", "---", "+", "  7"],
+        ["|", "   ", "|", "   ", "|", "   ", "|", "   ", "|", "   ", "|", "   ", "|", "   ", "|", "   ", "|", "   ", "|", "   "],
+        ["+", "---", "+", "---", "+", "---", "+", "---", "+", "---", "+", "---", "+", "---", "+", "---", "+", "---", "+", "  8"],
+        ["|", "   ", "|", "   ", "|", "   ", "|", "   ", "|", "   ", "|", "   ", "|", "   ", "|", "   ", "|", "   ", "|", "   "],
+        ["+", "---", "+", "---", "+", "---", "+", "---", "+", "---", "+", "---", "+", "---", "+", "---", "+", "---", "+", "  9"],
+        ["0", "   ", "1", "   ", "2", "   ", "3", "   ", "4", "   ", "5", "   ", "6", "   ", "7", "   ", "8", "   ", "9", "   "]];
+    for (i, line) in game.grid.iter().enumerate() {
+        for (j, &cell) in line.iter().enumerate() {
+            if cell {
+                let cell_length = board[i][j].len();
+                let wall_symbol = if cell_length == 3 { " x " } else { "x" };
+                board[i][j] = &wall_symbol;
+            }
+        }
     }
-
-    //// Build board representation - convert 18x18 back to 9x9 for display
-    //let mut player_grid = [[' '; 9]; 9];  // 9x9 grid for players
-    //let mut h_wall_grid = [[false; 9]; 9];  // Horizontal walls between rows
-    //let mut v_wall_grid = [[false; 9]; 9];  // Vertical walls between columns
-    //
-    //// Place players on the grid (convert from 18x18 to 9x9: divide by 2, subtract 0.5)
-    //let p0_x = ((game.player_pieces[0].x - 1) / 2) as usize;
-    //let p0_y = ((game.player_pieces[0].y - 1) / 2) as usize;
-    //let p1_x = ((game.player_pieces[1].x - 1) / 2) as usize;
-    //let p1_y = ((game.player_pieces[1].y - 1) / 2) as usize;
-    //
-    //player_grid[p0_y][p0_x] = 'A';
-    //player_grid[p1_y][p1_x] = 'H';
-    //
-    //// Read walls from grid and convert to display format
-    //for y in 0..20 {
-    //    for x in 0..20 {
-    //        if game.grid[y][x] {
-    //            // Wall found at (x, y) in 24x24 grid
-    //            // Convert to 9x9 display coordinates
-    //            let display_x = x / 2;
-    //            let display_y = y / 2;
-    //            
-    //            // Check if horizontal or vertical by looking at neighboring cells
-    //            // Horizontal walls span horizontally (check x+2, x+4)
-    //            // Vertical walls span vertically (check y+2, y+4)
-    //            if x + 2 < 18 && game.grid[y][x + 2] {
-    //                // Horizontal wall
-    //                if display_y < 9 && display_x < 9 {
-    //                    h_wall_grid[display_y][display_x] = true;
-    //                }
-    //            } else if y + 2 < 18 && game.grid[y + 2][x] {
-    //                // Vertical wall
-    //                if display_y < 9 && display_x < 9 {
-    //                    v_wall_grid[display_y][display_x] = true;
-    //                }
-    //            }
-    //        }
-    //    }
-    //}
-    //
-    //// Display the board
-    //println!("\n   0   1   2   3   4   5   6   7   8   9 (wall X coords)");
-    //println!(" 9 +---+---+---+---+---+---+---+---+---+");
-    //
-    //for y in (0..9).rev() {
-    //    // Print player row with vertical walls
-    //    print!("   ");
-    //    for x in 0..9 {
-    //        if v_wall_grid[y][x] {
-    //            print!("X");
-    //        } else {
-    //            print!("|");
-    //        }
-    //        print!(" {} ", player_grid[y][x]);
-    //    }
-    //    println!("|");
-    //    
-    //    // Print horizontal wall row
-    //    if y > 0 {
-    //        print!("{:2} +", y);
-    //        for x in 0..9 {
-    //            if h_wall_grid[y - 1][x] {
-    //                print!("XXX+");
-    //            } else {
-    //                print!("---+");
-    //            }
-    //        }
-    //        println!();
-    //    }
-    //}
-    //println!(" 0 +---+---+---+---+---+---+---+---+---+");
-    //
-    //println!("\nPlayer 0 (A): ({}, {}) - Walls: {}", 
-    //         game.player_pieces[0].x, game.player_pieces[0].y, game.walls_remaining[0]);
-    //println!("Player 1 (H): ({}, {}) - Walls: {}", 
-    //         game.player_pieces[1].x, game.player_pieces[1].y, game.walls_remaining[1]);
-    //println!("Current player: {}", game.active_player);
-    //println!("\nNote: Walls block movement. Place walls at coordinates between player spaces.");
+    for (idx, piece) in game.player_pieces.iter().enumerate() {
+        board[piece.y as usize][piece.x as usize] = if idx == 0 { " A " } else { " H " };
+    }
+    for row in &board {
+        println!("{}", row.concat());
+    }        //return false;
 }
 
 fn get_ai_move(game: &Quorridor) -> Move {
@@ -157,17 +135,44 @@ fn get_ai_move(game: &Quorridor) -> Move {
         UCTPolicy::new(1.414),  // Standard UCT exploration constant
         ApproxTable::new(8192)
     );
-    mcts.playout_n_parallel(1000, 1);
+    mcts.playout_n_parallel(100000, 4);
+    
+    // Print available moves and their evaluations
+    let available = game.available_moves();
+    println!("\nMove evaluations:");
+    for mov in &available {
+        let mut test_game = game.clone();
+        test_game.make_move(mov);
+        
+        let p0_dist = quorridor::shortest_path_to_goal(&test_game, 0).unwrap_or(1000);
+        let p1_dist = quorridor::shortest_path_to_goal(&test_game, 1).unwrap_or(1000);
+        let score = (p1_dist as i64 - p0_dist as i64) * 1000;
+        
+        match mov {
+            Move::Up => println!("  Up: score = {}", score),
+            Move::Down => println!("  Down: score = {}", score),
+            Move::Left => println!("  Left: score = {}", score),
+            Move::Right => println!("  Right: score = {}", score),
+            _ => {}
+        }
+    }
     
     match mcts.best_move() {
         Some(mov) => {
+            // Calculate score for the chosen move
+            let mut test_game = game.clone();
+            test_game.make_move(&mov);
+            let p0_dist = quorridor::shortest_path_to_goal(&test_game, 0).unwrap_or(1000);
+            let p1_dist = quorridor::shortest_path_to_goal(&test_game, 1).unwrap_or(1000);
+            let chosen_score = (p1_dist as i64 - p0_dist as i64) * 1000;
+            
             match &mov {
                 Move::PlaceWall(x, y, o) => {
                     // Convert back to display coordinates (divide by 2)
-                    println!("AI chose: PlaceWall({}, {}, {:?})", x/2, y/2, o);
+                    println!("\nAI chose: PlaceWall({}, {}, {:?}) with score = {}", x/2, y/2, o, chosen_score);
                 }
                 _ => {
-                    println!("AI chose: {:?}", mov);
+                    println!("\nAI chose: {:?} with score = {}", mov, chosen_score);
                 }
             }
             mov
@@ -230,8 +235,8 @@ fn get_human_move(game: &Quorridor) -> Move {
     println!("  d - Down");
     println!("  l - Left");
     println!("  r - Right");
-    println!("  w x y h - Place horizontal wall at (x, y) where x,y are 0-6");
-    println!("  w x y v - Place vertical wall at (x, y) where x,y are 0-6");
+    println!("  w x y h - Place horizontal wall at (x, y) where x,y are 0-9");
+    println!("  w x y v - Place vertical wall at (x, y) where x,y are 0-9");
     loop {
         let mov = capture_input();
         

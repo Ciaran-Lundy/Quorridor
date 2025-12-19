@@ -44,8 +44,8 @@ impl Evaluator<MyMCTS> for MyEvaluator {
         }
         
         // Use actual BFS shortest path distance to goal
-        let p0_distance = state.player_pieces[0].y; // shortest_path_to_goal(state, 0).unwrap_or(1000);
-        let p1_distance = GRID_HEIGHT as i64 - state.player_pieces[1].y; // shortest_path_to_goal(state, 1).unwrap_or(1000);
+        let p0_distance = shortest_path_to_goal(state, 0).unwrap_or(1000);
+        let p1_distance = shortest_path_to_goal(state, 1).unwrap_or(1000);
         
         // Lower distance is better - higher score for player 0 when p1 is farther
         let score = (p1_distance as i64 - p0_distance as i64) * 1000;

@@ -10,3 +10,6 @@ itertools = "0.10.1"
 [[bin]]
 name = "quorridor"
 path = "main.rs"
+
+[profile.release]
+debug = true

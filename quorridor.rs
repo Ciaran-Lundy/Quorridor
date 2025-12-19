@@ -25,9 +25,7 @@ pub struct Quorridor {
 impl Quorridor {
 
     pub fn wall_collision(&self, _target_x: i64, _target_y: i64) -> bool {
-        println!("Checking wall collision at x={}, y={}", _target_x as usize, _target_y as usize);
-        //self.grid[_target_y as usize][_target_x as usize]
-        return false;
+        self.grid[_target_y as usize][_target_x as usize]
     }
 
     pub fn player_collision(&self, player_idx: usize, x: i64, y: i64) -> bool {
@@ -39,14 +37,75 @@ impl Quorridor {
         let mut moves = Vec::new();
         let current_x = self.player_pieces[self.active_player].x;
         let current_y = self.player_pieces[self.active_player].y;
-        for (dx, dy, mov) in [(0, 1, crate::Move::Up), 
-                              (0, -1, crate::Move::Down), 
+        for (dx, dy, mov) in [(0, -1, crate::Move::Up), 
+                              (0, 1, crate::Move::Down), 
                               (-1, 0, crate::Move::Left), 
                               (1, 0, crate::Move::Right)] {
+            let target_x = current_x + dx + dx;
+            let target_y = current_y + dy + dy;
+            
+            // Players occupy odd positions from 1 to GRID_HEIGHT-1
+            if target_x < 1 || target_x >= GRID_HEIGHT as i64 || target_y < 1 || target_y >= GRID_HEIGHT as i64 {
+                continue;
+            }
+            
+            if !self.wall_collision(current_x + dx, current_y + dy) {
+                if !self.player_collision(self.active_player, target_x, target_y) {
+                    moves.push(mov);
+                }
+            }
+        }
+        moves
+    }
+
+    pub fn get_special_moves(&self) -> Vec<crate::Move> {
+        let mut moves = Vec::new();
+        let current_x = self.player_pieces[self.active_player].x;
+        let current_y = self.player_pieces[self.active_player].y;
+        for (dx, dy, mov) in [
+                              (0, -1, crate::Move::UpJump), 
+                              (0, 1, crate::Move::DownJump), 
+                              (-1, 0, crate::Move::LeftJump), 
+                              (1, 0, crate::Move::RightJump),] {
+            let target_x = current_x + dx + dx + dx + dx;
+            let target_y = current_y + dy + dy + dy + dy;
+            
+            if target_x < 1 || target_x >= GRID_HEIGHT as i64 || target_y < 1 || target_y >= GRID_HEIGHT as i64 {
+                continue;
+            }
+            if !self.wall_collision(current_x + dx, current_y + dy) {
+                if self.player_collision(self.active_player, current_x + dx + dx, current_y + dy + dy) {
+                    if !self.wall_collision(current_x + dx + dx + dx, current_y + dy + dy + dy) {
+                        moves.push(mov);
+                    }
+
+                }
+            }
+        }
+        for (dx, dy, dx1, dy1, mov) in [
+                        (0, -1, -1, 0, crate::Move::UpLeft), 
+                        (0, -1, 1, 0, crate::Move::UpRight),
+                        (0, 1, -1, 0, crate::Move::DownLeft),
+                        (0, 1, 1, 0, crate::Move::DownRight),
+                        (-1, 0, 0, -1, crate::Move::LeftUp),
+                        (-1, 0, 0, 1, crate::Move::LeftDown),
+                        (1, 0, 0, -1, crate::Move::RightUp),
+                        (1, 0, 0, 1, crate::Move::RightDown)] {
+            let target_x = current_x + dx + dx + dx1 + dx1;
+            let target_y = current_y + dy + dy + dy1 + dy1;
+            
+            if target_x < 1 || target_x >= GRID_HEIGHT as i64 || target_y < 1 || target_y >= GRID_HEIGHT as i64 {
+                continue;
+            }
 
             if !self.wall_collision(current_x + dx, current_y + dy) {
-                if !self.player_collision(self.active_player, current_x + dx + dx, current_y + dy + dy) {
-                    moves.push(mov);
+                if self.player_collision(self.active_player, current_x + dx + dx, current_y + dy + dy) {
+                    if self.wall_collision(current_x + dx + dx + dx, current_y + dy + dy + dy) {
+                        if !self.wall_collision(current_x + dx + dx + dx1, current_y + dy + dy + dy1) {    
+                            moves.push(mov);
+                        }
+
+                    }
                 }
             }
         }
@@ -87,7 +146,6 @@ impl Quorridor {
 
         let candidate_wall = Wall { x, y, orientation: *orientation };
         for (_x, _y) in candidate_wall.positions() {
-            println!("Checking bounds collision at x={}, y={}", _x, _y);
             if _x > GRID_WIDTH as i64 - 1|| _y > GRID_HEIGHT as i64 -1 {
                 return false;
             }
@@ -109,8 +167,7 @@ impl Quorridor {
             return moves;
         }
 
-        for (x, y, orientation) in iproduct!((0..(GRID_WIDTH - 1) as i64).step_by(2), (0..(GRID_HEIGHT - 1) as i64).step_by(2), [Orientation::Horizontal, Orientation::Vertical].iter()) {
-            println!("Checking wall position x={}, y={}, orientation={:?}", x, y, orientation);
+        for (x, y, orientation) in iproduct!((0..(GRID_WIDTH - 0) as i64).step_by(2), (0..(GRID_HEIGHT - 0) as i64).step_by(2), [Orientation::Horizontal, Orientation::Vertical].iter()) {
             if !self.validate_wall_move(x, y, orientation) {
                 continue;
             }
@@ -130,7 +187,7 @@ impl Default for Quorridor {
         Quorridor {
             player_pieces: [
                 Piece { x: mid_x, y: 1 },   // Player 0 starts at bottom middle
-                Piece { x: mid_x, y: (GRID_HEIGHT - 1) as i64 }   // Player 1 starts at top middle
+                Piece { x: mid_x, y: (GRID_HEIGHT - 2) as i64 }   // Player 1 starts at top middle
             ],
             active_player: 0,
             grid: [[false; GRID_WIDTH]; GRID_HEIGHT],  // No walls initially
@@ -144,7 +201,7 @@ pub fn shortest_path_to_goal(game: &Quorridor, player_idx: usize) -> Option<usiz
     use std::collections::{VecDeque, HashSet};
     
     let start = game.player_pieces[player_idx];
-    let goal_y = if player_idx == 0 { (GRID_HEIGHT - 1) as i64 } else { 1 };
+    let goal_y = if player_idx == 0 { (GRID_HEIGHT - 2) as i64 } else { 1 };
     
     let mut queue = VecDeque::new();
     let mut visited = HashSet::new();
@@ -167,7 +224,7 @@ pub fn shortest_path_to_goal(game: &Quorridor, player_idx: usize) -> Option<usiz
         
         for (nx, ny) in moves {
             // Stay within odd positions (1 to GRID_HEIGHT-1)
-            if nx < 1 || nx > (GRID_WIDTH - 1) as i64 || ny < 1 || ny > (GRID_HEIGHT - 1) as i64 {
+            if nx < 1 || nx > (GRID_WIDTH - 2) as i64 || ny < 1 || ny > (GRID_HEIGHT - 2) as i64 {
                 continue;
             }
             
@@ -219,7 +276,7 @@ pub fn has_path_to_goal(game: &Quorridor, player_idx: usize) -> bool {
         
         for (nx, ny) in moves {
             // Stay within odd positions (1 to GRID_HEIGHT-1)
-            if nx < 1 || nx > (GRID_WIDTH - 1) as i64 || ny < 1 || ny > (GRID_HEIGHT - 1) as i64 {
+            if nx < 1 || nx > (GRID_WIDTH - 2) as i64 || ny < 1 || ny > (GRID_HEIGHT - 2) as i64 {
                 continue;
             }
             
