@@ -59,7 +59,7 @@ fn get_ai_move(game: &Quorridor, evaluator: &MyEvaluator, use_parallel: bool) ->
     );
     
     if use_parallel {
-        mcts.playout_n_parallel(10000, 4);  // Parallel mode (heuristic only)
+        mcts.playout_n_parallel(1000, 4);  // Parallel mode (heuristic only)
     } else {
         mcts.playout_n(10000);  // Single-threaded (for network evaluation)
     }
@@ -171,7 +171,7 @@ fn main() {
     let (evaluator, use_parallel) = if use_network {
         println!("Loading trained network from model.pt...");
         let mut network = PolicyNetwork::new();
-        match network.vs_mut().load("model.pt") {
+        match network.load("model.safetensors") {
             Ok(_) => {
                 println!("Network loaded successfully!\n");
                 (MyEvaluator::with_network(Arc::new(Mutex::new(network))), false)
