@@ -258,23 +258,68 @@ impl Default for Quorridor {
 
 
 pub fn shortest_path_to_goal(game: &Quorridor, player_idx: usize) -> Option<usize> {
-    use std::collections::{VecDeque, HashSet};
+    use std::collections::BinaryHeap;
+    use std::cmp::Ordering;
+    
+    // A* node with f-score (g + h) for priority queue ordering
+    #[derive(Eq, PartialEq)]
+    struct Node {
+        x: i64,
+        y: i64,
+        g_score: usize,  // Actual distance from start
+        f_score: usize,  // g_score + heuristic
+    }
+    
+    impl Ord for Node {
+        fn cmp(&self, other: &Self) -> Ordering {
+            // Reverse ordering for min-heap (BinaryHeap is max-heap by default)
+            other.f_score.cmp(&self.f_score)
+                .then_with(|| other.g_score.cmp(&self.g_score))
+        }
+    }
+    
+    impl PartialOrd for Node {
+        fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+            Some(self.cmp(other))
+        }
+    }
     
     let start = game.player_pieces[player_idx];
     let goal_y = if player_idx == 0 { (GRID_HEIGHT - 2) as i64 } else { 1 };
     
-    let mut queue = VecDeque::new();
-    let mut visited = HashSet::new();
+    // Heuristic: Manhattan distance to goal line (divided by 2 since we move by 2)
+    let heuristic = |y: i64| -> usize {
+        ((goal_y - y).abs() / 2) as usize
+    };
     
-    queue.push_back((start.x, start.y, 0usize));
-    visited.insert((start.x, start.y));
+    let mut open_set = BinaryHeap::with_capacity(64);
+    // Use fixed-size array on stack instead of heap allocation
+    let mut visited = [[false; GRID_WIDTH]; GRID_HEIGHT];
     
-    while let Some((x, y, dist)) = queue.pop_front() {
+    open_set.push(Node {
+        x: start.x,
+        y: start.y,
+        g_score: 0,
+        f_score: heuristic(start.y),
+    });
+    
+    while let Some(current) = open_set.pop() {
+        let x = current.x;
+        let y = current.y;
+        let g = current.g_score;
+        
+        // Goal check
         if y == goal_y {
-            return Some(dist);
+            return Some(g);
         }
         
-        // Move by 2 in grid (odd position to odd position)
+        // Skip if already visited (we might have duplicates in heap)
+        if visited[y as usize][x as usize] {
+            continue;
+        }
+        visited[y as usize][x as usize] = true;
+        
+        // Explore neighbors (move by 2 in grid)
         for (dx, dy) in [(2, 0), (-2, 0), (0, 2), (0, -2)] {
             let nx = x + dx;
             let ny = y + dy;
@@ -284,22 +329,26 @@ pub fn shortest_path_to_goal(game: &Quorridor, player_idx: usize) -> Option<usiz
                 continue;
             }
             
-            if visited.contains(&(nx, ny)) {
+            if visited[ny as usize][nx as usize] {
                 continue;
             }
             
             // Check wall between current and next position (midpoint)
             let wall_x = (x + nx) / 2;
             let wall_y = (y + ny) / 2;
-            if wall_x < 0 || wall_x >= GRID_WIDTH as i64 - 1|| wall_y < 0 || wall_y >= GRID_HEIGHT as i64 -1 {
-                continue;
-            }
             if game.wall_collision(wall_x, wall_y) {
                 continue;
             }
             
-            visited.insert((nx, ny));
-            queue.push_back((nx, ny, dist + 1));
+            let new_g = g + 1;
+            let h = heuristic(ny);
+            
+            open_set.push(Node {
+                x: nx,
+                y: ny,
+                g_score: new_g,
+                f_score: new_g + h,
+            });
         }
     }
     
@@ -307,17 +356,15 @@ pub fn shortest_path_to_goal(game: &Quorridor, player_idx: usize) -> Option<usiz
 }
 
 pub fn has_path_to_goal(game: &Quorridor, player_idx: usize) -> bool {
-
-    use std::collections::HashSet;
-    
+    // Use fixed-size array on stack instead of heap allocation
     let start = game.player_pieces[player_idx];
     let goal_y = if player_idx == 0 { (GRID_HEIGHT - 2) as i64 } else { 1 };
     
-    let mut visited = HashSet::new();
-    let mut stack = Vec::new();
+    let mut visited = [[false; GRID_WIDTH]; GRID_HEIGHT];
+    let mut stack = Vec::with_capacity(64);  // Pre-allocate reasonable capacity
     
     stack.push((start.x, start.y));
-    visited.insert((start.x, start.y));
+    visited[start.y as usize][start.x as usize] = true;
     
     while let Some((x, y)) = stack.pop() {
         if y == goal_y {
@@ -334,7 +381,7 @@ pub fn has_path_to_goal(game: &Quorridor, player_idx: usize) -> bool {
                 continue;
             }
             
-            if visited.contains(&(nx, ny)) {
+            if visited[ny as usize][nx as usize] {
                 continue;
             }
             
@@ -345,7 +392,7 @@ pub fn has_path_to_goal(game: &Quorridor, player_idx: usize) -> bool {
                 continue;
             }
             
-            visited.insert((nx, ny));
+            visited[ny as usize][nx as usize] = true;
             stack.push((nx, ny));
         }
     }
