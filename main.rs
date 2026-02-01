@@ -6,7 +6,7 @@ use itertools::iproduct;
 use std::io::{self, Write};
 use std::sync::{Arc, Mutex};
 
-use quorridor::{Quorridor, Move, Piece, Wall, mcts_impl::MyEvaluator, move_player, place_wall, Orientation, WallPlacementResult, GRID_HEIGHT, policy_network::PolicyNetwork};
+use quorridor::{Quorridor, Move, Piece, Wall, mcts_impl::MyEvaluator, move_player, place_wall, Orientation, WallPlacementResult, GRID_HEIGHT, policy_network::PolicyNetwork, log_game_metrics, create_metrics_file};
  
 fn display_board(game: &Quorridor) {
     let mut board = [
@@ -166,6 +166,13 @@ fn get_human_move(game: &Quorridor) -> Move {
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let use_network = args.contains(&"--network".to_string());
+    let log_metrics = args.contains(&"--log-metrics".to_string());
+    
+    // Create metrics file if logging is enabled
+    if log_metrics {
+        create_metrics_file("game_metrics.csv");
+        println!("Logging metrics to game_metrics.csv\n");
+    }
     
     // Load network if requested
     let (evaluator, use_parallel) = if use_network {
@@ -201,6 +208,11 @@ fn main() {
     
     loop {
         display_board(&game);
+        
+        // Log metrics if enabled
+        if log_metrics {
+            log_game_metrics(&game, "game_metrics.csv");
+        }
         
         // Check for winner
         if game.game_over() {

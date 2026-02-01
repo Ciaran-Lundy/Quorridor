@@ -1,4 +1,5 @@
 use crate::quorridor::Quorridor;
+use std::sync::Arc;
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Orientation {
@@ -44,9 +45,10 @@ pub fn place_wall(game: &mut Quorridor, x: i64, y: i64, orientation: Orientation
     }
 
     let wall = Wall { x, y, orientation };
-    // Place the wall
+    // Place the wall - use Arc::make_mut for copy-on-write
+    let grid = Arc::make_mut(&mut game.grid);
     for (px, py) in wall.positions() {
-        game.grid[py as usize][px as usize] = true;
+        grid[py as usize][px as usize] = true;
     }
     
     game.walls_remaining[idx] -= 1;

@@ -13,6 +13,7 @@ itertools = "0.10.1"
 tch = { version = "0.16", features = ["download-libtorch"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+rusqlite = { version = "0.32", features = ["bundled"] }
 
 [[bin]]
 name = "quorridor"

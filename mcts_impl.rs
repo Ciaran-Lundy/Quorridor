@@ -50,6 +50,8 @@ impl Evaluator<MyMCTS> for MyEvaluator {
     fn evaluate_new_state(&self, state: &Quorridor, moves: &Vec<Move>,
         _: Option<SearchHandle<MyMCTS>>)
         -> (Vec<()>, i64) {   
+        // Turn number is available via state.turn_number
+        
         // Check for terminal states
         if state.player_pieces[0].y >= (GRID_HEIGHT - 2) as i64 {
         return (vec![(); moves.len()], 100000);  // Player 0 wins
